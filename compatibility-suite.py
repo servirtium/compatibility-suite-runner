@@ -6,9 +6,7 @@ from pathlib import Path
 import platform
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
 import subprocess
 import time
 import argparse
@@ -21,7 +19,7 @@ parser.add_argument("-p", "--port", help="The port Servirtium will run on", type
 parser.add_argument("-d", "--chromedriver", help="The location of the Selenium Chrome Webdriver executable - omit to use one that's on the system PATH")
 parser.add_argument("-t", "--testpage", help="The page to point chrome at to run the tests, use the '%%s' token where the port should be specified. To point back at the original todobackend, specify http://www.todobackend.com/specs/index.html?http://localhost:%%s/todos", default="https://servirtium.github.io/compatibility-suite/index.html?http://localhost:%s/todos")
 parser.add_argument("--backend", help="The real todo backend implementation, only used in 'record' or 'direct' mode", default="http://todo-backend-sinatra.herokuapp.com")
-parser.add_argument("--timeoutseconds", help="Number of seconds to wait before giving up on a successful run and ending the test run", type=int, default=15)
+parser.add_argument("--timeoutseconds", help="Number of seconds to wait before giving up on a successful run and ending the test run", type=int, default=25)
 
 args = parser.parse_args()
 
@@ -51,28 +49,42 @@ if args.chromedriver:
 else:
     chrome = webdriver.Chrome(options=chrome_options)
 
-time.sleep(10)
+time.sleep(5)
 
 chrome.get(browser_url)
-try:
-    element = WebDriverWait(chrome, args.timeoutseconds).until(
-        EC.text_to_be_present_in_element((By.CLASS_NAME, "passes"), "16")
-    )
-    print("Compatibility suite: all 16 tests passed")
+start = time.time()
 
-except TimeoutException as ex:
-    print("Compatibility suite: did not finish with 16 passes. See open browser frame.")
+while True:
+    number_of_passes = int(chrome.find_element_by_class_name("passes").text.replace("passes: ", ""))
+
+    try:
+        error_class = chrome.find_element_by_class_name("error").text
+    except NoSuchElementException:
+        error_class = ""
+
+    if number_of_passes == 16:
+        print("*** Compatibility suite: all 16 tests passed ***")
+        print("Closing Selenium")
+        chrome.quit()
+        break
+
+    if "ERROR" in error_class:
+        print("*** Compatibility suite: did finished with " + str(number_of_passes) + " instead of 16 passes as expected. See open browser frame and 'ERROR' in that page ***")
+        break
+
+    if (time.time() - start) > 45:
+        print("*** Compatibility suite: Timed out after 45 seconds. See open browser frame. ***")
+        break
+
+    time.sleep(1)
 
 # TODO warn that docker process was not started.
 
-print("mode: " + args.mode)
-
-
 if args.mode == "record" or args.mode == "playback":
     print("Killing Servirtium Standalone Server")
-    subprocess.call(["docker", "cp", docker_container_name + ":Servirtium/test_recording_output/recording.md", ".compatibility_suite_recording.md"])
+    if args.mode == "record":
+        subprocess.call(["docker", "cp", docker_container_name + ":Servirtium/test_recording_output/recording.md", ".compatibility_suite_recording.md"])
+        print("Recording copied to: .compatibility_suite_recording.md")
     subprocess.call(["docker", "stop", docker_container_name])
 
-print("Closing Selenium")
-chrome.quit()
-print("All done.")
+print("Compatibility test suite completed. See above for pass/fail")
