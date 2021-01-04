@@ -51,6 +51,7 @@ if args.chromedriver:
 else:
     chrome = webdriver.Chrome(options=chrome_options)
 
+time.sleep(10)
 
 chrome.get(browser_url)
 try:
@@ -69,6 +70,7 @@ print("mode: " + args.mode)
 
 if args.mode == "record" or args.mode == "playback":
     print("Killing Servirtium Standalone Server")
+    subprocess.call(["docker", "cp", docker_container_name + ":Servirtium/test_recording_output/recording.md", ".compatibility_suite_recording.md"])
     subprocess.call(["docker", "stop", docker_container_name])
 
 print("Closing Selenium")
