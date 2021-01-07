@@ -28,6 +28,13 @@ browser_url = args.testpage %(args.port)
 docker_container_name = "servirtium-compatibility-test-%s" %(args.mode)
 
 if args.mode == "record" or args.mode == "playback":
+
+    dockerInfo = subprocess.Popen(["docker", "info"], stdout=subprocess.PIPE)
+    result = str(dockerInfo.communicate()[0])
+    if "Is the docker daemon running?" in result:
+        print("ERROR: Docker Daemon needs to be running - start it please.")
+        exit(10)
+
     subprocess.call(["docker", "volume", "create", "scripts"])
     subprocess.call(["docker", "rm", docker_container_name, "-f"])
     docker_args = ["docker", "run", "-p", "%s:%s" %(str(args.port), str(args.port)), "--volume", "scripts:/Servirtium/test_recording_output", "--name", docker_container_name, "-d"]
